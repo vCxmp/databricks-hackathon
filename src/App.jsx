@@ -1,5 +1,5 @@
 import { useState } from "react";
-import weatherData from './weatherData';
+import weatherData from "./weatherData";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
@@ -8,6 +8,19 @@ const US_STATES = [
   "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
   "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
 ];
+
+const STATE_ENCODING = {
+  AL: 0,  AK: 1,  AZ: 2,  AR: 3,  CA: 4,
+  CO: 5,  CT: 6,  DE: 7,  FL: 8,  GA: 9,
+  HI: 10, ID: 11, IL: 12, IN: 13, IA: 14,
+  KS: 15, KY: 16, LA: 17, ME: 18, MD: 19,
+  MA: 20, MI: 21, MN: 22, MS: 23, MO: 24,
+  MT: 25, NE: 26, NV: 27, NH: 28, NJ: 29,
+  NM: 30, NY: 31, NC: 32, ND: 33, OH: 34,
+  OK: 35, OR: 36, PA: 37, RI: 38, SC: 39,
+  SD: 40, TN: 41, TX: 42, UT: 43, VT: 44,
+  VA: 45, WA: 46, WV: 47, WI: 48, WY: 49
+};
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Serif+Display&display=swap');
@@ -327,15 +340,32 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [crop, setCrop] = useState("");
   const [state, setState] = useState("");
+  const [modelPayload, setModelPayload] = useState(null);
 
   const canPredict = crop !== "" && state !== "";
+
+  const handlePredict = () => {
+    const stateEncoding = STATE_ENCODING[state]; 
+    const filteredWeatherData = weatherData.filter(
+      d => d.state_encoded === stateEncoding
+    );
+
+    const payload = {
+      state_encoded: stateEncoding,
+      weather_data: filteredWeatherData,
+    };
+
+    console.log("Model payload:", payload);
+    setModelPayload(payload);
+    setPage("results");
+  };
 
   return (
     <>
       <style>{styles}</style>
       {page === "home"
-        ? <HomePage crop={crop} setCrop={setCrop} state={state} setState={setState} canPredict={canPredict} onPredict={() => setPage("results")} />
-        : <ResultsPage crop={crop} state={state} onBack={() => { setPage("home"); setCrop(""); setState(""); }} />
+        ? <HomePage crop={crop} setCrop={setCrop} state={state} setState={setState} canPredict={canPredict} onPredict={handlePredict} />
+        : <ResultsPage crop={crop} state={state} modelPayload={modelPayload} onBack={() => { setPage("home"); setCrop(""); setState(""); setModelPayload(null); }} />
       }
     </>
   );
@@ -399,7 +429,7 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
   );
 }
 
-function ResultsPage({ crop, state, onBack }) {
+function ResultsPage({ crop, state, modelPayload, onBack }) {
   return (
     <div className="page">
       <div className="results-header">
@@ -435,7 +465,11 @@ function ResultsPage({ crop, state, onBack }) {
             </div>
             <div className="placeholder-box">
               <strong>No prediction available yet</strong>
-              <p>The prediction model has not been connected.<br />Results will appear here once the model is integrated.</p>
+              <p>
+                The prediction model has not been connected.<br />
+                {modelPayload && `${modelPayload.weather_data.length} weather records loaded for state encoding ${modelPayload.state_encoded}.`}
+                <br />Results will appear here once the model is integrated.
+              </p>
             </div>
           </div>
         </div>

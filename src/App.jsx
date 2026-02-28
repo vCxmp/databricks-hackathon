@@ -1,4 +1,5 @@
 import { useState } from "react";
+import weatherData from './weatherData';
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",

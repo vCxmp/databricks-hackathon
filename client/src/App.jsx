@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import weatherData from "./weatherData";
 
 const US_STATES = [
@@ -340,6 +341,7 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [crop, setCrop] = useState("");
   const [state, setState] = useState("");
+  const [chartData, setChartData] = useState(null);
   // const [modelPayload, setModelPayload] = useState(null);
   const [prediction, setPrediction] = useState(null);
 
@@ -357,7 +359,7 @@ export default function App() {
       temp_max: d.temp_max,
       temp_min: d.temp_min,
       precipitation: d.precipitation,
-      year_bin: d.year_bin,
+      year_bin: d.year_bin - 2010,  // convert to match training
     }));
 
     const payload = { dataframe_records: records };
@@ -369,13 +371,21 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       const result = await response.json();
-      console.log(result); // check the full shape
+      console.log(result.predictions);
       if (result.error) {
         console.error('Server error:', result.error);
         setPrediction(null);
       } else {
         setPrediction(result.predictions[0]); // extract the first prediction
       }
+
+      const predictions = result.predictions;
+      const data = filteredWeatherData.map((d, i) => ({
+        year: d.year_bin,
+        yield: parseFloat(predictions[i].toFixed(2)),
+      }));
+      setChartData(data);
+      setPrediction(predictions.reduce((a, b) => a + b, 0) / predictions.length);
     } catch (err) {
       console.error('Prediction failed:', err);
     }
@@ -392,6 +402,7 @@ export default function App() {
           crop={crop}
           state={state}
           prediction={prediction}
+          chartData={chartData}
           onBack={() => { setPage("home"); setCrop(""); setState(""); setPrediction(null); }}
         />
       }
@@ -457,7 +468,7 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
   );
 }
 
-function ResultsPage({ crop, state, prediction, onBack }) {
+function ResultsPage({ crop, state, prediction, chartData, onBack }) {
   return (
     <div className="page">
       <div className="results-header">
@@ -474,7 +485,7 @@ function ResultsPage({ crop, state, prediction, onBack }) {
               <h3>Yield Prediction</h3>
               <p>Forecast for {crop} in {state}</p>
             </div>
-            <span className="status-badge">Model Pending</span>
+            <span className="status-badge">{prediction ? "Ready" : "Model Pending"}</span>
           </div>
           <div className="rc-body">
             <div className="meta-row">
@@ -487,16 +498,28 @@ function ResultsPage({ crop, state, prediction, onBack }) {
                 <div className="meta-chip-value">{state}</div>
               </div>
               <div className="meta-chip">
-                <div className="meta-chip-label">Yield (bu/ac)</div>
-                <div className="meta-chip-value">{prediction ?? "—"}</div>
+                <div className="meta-chip-label">Avg Yield (bu/ac)</div>
+                <div className={`meta-chip-value ${prediction ? "" : "empty"}`}>
+                  {prediction ? parseFloat(prediction.toFixed(2)) : "—"}
+                </div>
               </div>
             </div>
-            <div className="placeholder-box">
-              {prediction
-                ? <strong>Predicted yield: {prediction} bu/ac</strong>
-                : <strong>No prediction available yet</strong>
-              }
-            </div>
+
+            {chartData
+              ? <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData} margin={{ top: 8, right: 24, left: 0, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ddd5c4" />
+                    <XAxis dataKey="year" tick={{ fontSize: 12 }} label={{ value: 'Year', position: 'insideBottom', offset: -2 }} />
+                    <YAxis tick={{ fontSize: 12 }} label={{ value: 'bu/ac', angle: -90, position: 'insideLeft' }} />
+                    <Tooltip formatter={(val) => [`${val} bu/ac`, 'Yield']} />
+                    <Line type="monotone" dataKey="yield" stroke="#2c4a2e" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              : <div className="placeholder-box">
+                  <strong>No prediction available yet</strong>
+                  <p>Select a crop and state to generate a forecast.</p>
+                </div>
+            }
           </div>
         </div>
       </div>

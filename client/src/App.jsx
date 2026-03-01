@@ -2,16 +2,16 @@ import { useState } from "react";
 import weatherData from "./weatherData";
 
 const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
-  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
+  "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
+  "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+  "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
+  "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"
 ];
 
 const STATE_ENCODING = {
-  AL: 0,  AK: 1,  AZ: 2,  AR: 3,  CA: 4,
-  CO: 5,  CT: 6,  DE: 7,  FL: 8,  GA: 9,
+  AL: 0, AK: 1, AZ: 2, AR: 3, CA: 4,
+  CO: 5, CT: 6, DE: 7, FL: 8, GA: 9,
   HI: 10, ID: 11, IL: 12, IN: 13, IA: 14,
   KS: 15, KY: 16, LA: 17, ME: 18, MD: 19,
   MA: 20, MI: 21, MN: 22, MS: 23, MO: 24,
@@ -340,23 +340,46 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [crop, setCrop] = useState("");
   const [state, setState] = useState("");
-  const [modelPayload, setModelPayload] = useState(null);
+  // const [modelPayload, setModelPayload] = useState(null);
+  const [prediction, setPrediction] = useState(null);
 
   const canPredict = crop !== "" && state !== "";
 
-  const handlePredict = () => {
-    const stateEncoding = STATE_ENCODING[state]; 
+  const handlePredict = async () => {
+    const stateEncoding = STATE_ENCODING[state];
     const filteredWeatherData = weatherData.filter(
       d => d.state_encoded === stateEncoding
     );
 
-    const payload = {
+    // flatten — send each weather row as its own record
+    const records = filteredWeatherData.map(d => ({
       state_encoded: stateEncoding,
-      weather_data: filteredWeatherData,
-    };
+      temp_max: d.temp_max,
+      temp_min: d.temp_min,
+      precipitation: d.precipitation,
+      year_bin: d.year_bin,
+    }));
 
-    console.log("Model payload:", payload);
-    setModelPayload(payload);
+    const payload = { dataframe_records: records };
+
+    try {
+      const response = await fetch('http://localhost:8080/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      console.log(result); // check the full shape
+      if (result.error) {
+        console.error('Server error:', result.error);
+        setPrediction(null);
+      } else {
+        setPrediction(result.predictions[0]); // extract the first prediction
+      }
+    } catch (err) {
+      console.error('Prediction failed:', err);
+    }
+
     setPage("results");
   };
 
@@ -365,7 +388,12 @@ export default function App() {
       <style>{styles}</style>
       {page === "home"
         ? <HomePage crop={crop} setCrop={setCrop} state={state} setState={setState} canPredict={canPredict} onPredict={handlePredict} />
-        : <ResultsPage crop={crop} state={state} modelPayload={modelPayload} onBack={() => { setPage("home"); setCrop(""); setState(""); setModelPayload(null); }} />
+        : <ResultsPage
+          crop={crop}
+          state={state}
+          prediction={prediction}
+          onBack={() => { setPage("home"); setCrop(""); setState(""); setPrediction(null); }}
+        />
       }
     </>
   );
@@ -429,7 +457,7 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
   );
 }
 
-function ResultsPage({ crop, state, modelPayload, onBack }) {
+function ResultsPage({ crop, state, prediction, onBack }) {
   return (
     <div className="page">
       <div className="results-header">
@@ -460,16 +488,14 @@ function ResultsPage({ crop, state, modelPayload, onBack }) {
               </div>
               <div className="meta-chip">
                 <div className="meta-chip-label">Yield (bu/ac)</div>
-                <div className="meta-chip-value empty">—</div>
+                <div className="meta-chip-value">{prediction ?? "—"}</div>
               </div>
             </div>
             <div className="placeholder-box">
-              <strong>No prediction available yet</strong>
-              <p>
-                The prediction model has not been connected.<br />
-                {modelPayload && `${modelPayload.weather_data.length} weather records loaded for state encoding ${modelPayload.state_encoded}.`}
-                <br />Results will appear here once the model is integrated.
-              </p>
+              {prediction
+                ? <strong>Predicted yield: {prediction} bu/ac</strong>
+                : <strong>No prediction available yet</strong>
+              }
             </div>
           </div>
         </div>

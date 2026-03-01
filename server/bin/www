@@ -5,7 +5,7 @@ import http from 'http';
 
 const serverDebug = debug('server:server');
 
-const port = normalizePort(process.env.PORT || '5000');
+const port = normalizePort(process.env.PORT || '8080');
 app.set('port', port);
 
 const server = http.createServer(app);
@@ -42,4 +42,5 @@ function onListening() {
   var addr = server.address();
   var bind = typeof addr === 'string' ? 'pipe ' + addr : 'port ' + addr.port;
   serverDebug('Listening on ' + bind);
+  console.log(`Server running on ${bind}`); // add this line
 }

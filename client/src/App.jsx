@@ -1,5 +1,4 @@
 import { useState } from "react";
-import weatherData from "./weatherData";
 
 const US_STATES = [
   "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -79,17 +78,18 @@ const styles = `
     align-items: center;
     justify-content: center;
     padding: 32px 48px;
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   .card {
     background: #faf7f2;
     border: 1px solid #ddd5c4;
     border-radius: 12px;
-    padding: 52px 60px;
+    padding: 48px 60px;
     width: 100%;
     max-width: 620px;
     box-shadow: 0 2px 16px rgba(60,40,10,0.08);
+    margin: auto;
   }
 
   .card-title {
@@ -103,11 +103,11 @@ const styles = `
   .card-desc {
     font-size: 15px;
     color: #8a7d6a;
-    margin-bottom: 32px;
+    margin-bottom: 28px;
     line-height: 1.5;
   }
 
-  .field { margin-bottom: 20px; }
+  .field { margin-bottom: 18px; }
 
   label {
     display: block;
@@ -117,7 +117,7 @@ const styles = `
     margin-bottom: 7px;
   }
 
-  select {
+  select, input[type="number"] {
     width: 100%;
     padding: 13px 16px;
     border: 1px solid #c9bfaf;
@@ -126,27 +126,54 @@ const styles = `
     font-family: 'DM Sans', sans-serif;
     color: #1e1a14;
     background: #fff;
-    appearance: none;
-    cursor: pointer;
     outline: none;
     transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  select {
+    appearance: none;
+    cursor: pointer;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 16px center;
   }
 
-  select:focus {
+  select:focus, input[type="number"]:focus {
     border-color: #2c4a2e;
     box-shadow: 0 0 0 3px rgba(44,74,46,0.12);
   }
 
+  input[type="number"]::placeholder { color: #b0a090; }
+
+  /* Remove number input arrows */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; }
+
   select.empty { color: #b0a090; }
   select option { color: #1e1a14; }
+
+  .input-row {
+    display: flex;
+    gap: 14px;
+  }
+
+  .input-row .field { flex: 1; }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #8a7d6a;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    margin-top: 4px;
+  }
 
   .divider {
     border: none;
     border-top: 1px solid #ddd5c4;
-    margin: 28px 0;
+    margin: 24px 0;
   }
 
   .btn-predict {
@@ -340,27 +367,34 @@ export default function App() {
   const [page, setPage] = useState("home");
   const [crop, setCrop] = useState("");
   const [state, setState] = useState("");
-  // const [modelPayload, setModelPayload] = useState(null);
+  const [tempMin, setTempMin] = useState("");
+  const [tempMax, setTempMax] = useState("");
+  const [precipitation, setPrecipitation] = useState("");
+  const [year, setYear] = useState("");
   const [prediction, setPrediction] = useState(null);
 
-  const canPredict = crop !== "" && state !== "";
+  const canPredict =
+    crop !== "" &&
+    state !== "" &&
+    tempMin !== "" &&
+    tempMax !== "" &&
+    precipitation !== "" &&
+    year !== "";
 
   const handlePredict = async () => {
     const stateEncoding = STATE_ENCODING[state];
-    const filteredWeatherData = weatherData.filter(
-      d => d.state_encoded === stateEncoding
-    );
 
-    // flatten — send each weather row as its own record
-    const records = filteredWeatherData.map(d => ({
-      state_encoded: stateEncoding,
-      temp_max: d.temp_max,
-      temp_min: d.temp_min,
-      precipitation: d.precipitation,
-      year_bin: d.year_bin,
-    }));
+    const payload = {
+      data: [{
+        state_encoded: stateEncoding,
+        temp_max: parseFloat(tempMax) * 10,
+        temp_min: parseFloat(tempMin) * 10,
+        precipitation: parseFloat(precipitation) * 10,
+        year_bin: parseFloat(year) - 2010,
+      }]
+    };
 
-    const payload = { dataframe_records: records };
+    console.log("Model payload:", payload);
 
     try {
       const response = await fetch('http://localhost:8080/api/predict', {
@@ -369,37 +403,58 @@ export default function App() {
         body: JSON.stringify(payload)
       });
       const result = await response.json();
-      console.log(result); // check the full shape
+      console.log(result);
       if (result.error) {
         console.error('Server error:', result.error);
         setPrediction(null);
       } else {
-        setPrediction(result.predictions[0]); // extract the first prediction
+        setPrediction(result.predictions[0]);
       }
     } catch (err) {
       console.error('Prediction failed:', err);
+      setPrediction(null);
     }
 
     setPage("results");
+  };
+
+  const handleBack = () => {
+    setPage("home");
+    setCrop("");
+    setState("");
+    setTempMin("");
+    setTempMax("");
+    setPrecipitation("");
+    setYear("");
+    setPrediction(null);
   };
 
   return (
     <>
       <style>{styles}</style>
       {page === "home"
-        ? <HomePage crop={crop} setCrop={setCrop} state={state} setState={setState} canPredict={canPredict} onPredict={handlePredict} />
+        ? <HomePage
+            crop={crop} setCrop={setCrop}
+            state={state} setState={setState}
+            tempMin={tempMin} setTempMin={setTempMin}
+            tempMax={tempMax} setTempMax={setTempMax}
+            precipitation={precipitation} setPrecipitation={setPrecipitation}
+            year={year} setYear={setYear}
+            canPredict={canPredict}
+            onPredict={handlePredict}
+          />
         : <ResultsPage
-          crop={crop}
-          state={state}
-          prediction={prediction}
-          onBack={() => { setPage("home"); setCrop(""); setState(""); setPrediction(null); }}
-        />
+            crop={crop}
+            state={state}
+            prediction={prediction}
+            onBack={handleBack}
+          />
       }
     </>
   );
 }
 
-function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
+function HomePage({ crop, setCrop, state, setState, tempMin, setTempMin, tempMax, setTempMax, precipitation, setPrecipitation, year, setYear, canPredict, onPredict }) {
   return (
     <div className="page">
       <div className="header">
@@ -410,7 +465,9 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
       <div className="main">
         <div className="card">
           <h1 className="card-title">Predict Crop Yield</h1>
-          <p className="card-desc">Select a crop and state to generate a yield forecast.</p>
+          <p className="card-desc">Select a crop and state, then enter weather conditions to generate a yield forecast.</p>
+
+          <p className="section-label">Crop & Location</p>
 
           <div className="field">
             <label htmlFor="crop-select">Crop</label>
@@ -439,6 +496,55 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
           </div>
 
           <hr className="divider" />
+          <p className="section-label">Weather Conditions</p>
+
+          <div className="input-row">
+            <div className="field">
+              <label htmlFor="temp-min">Min Temperature (°C)</label>
+              <input
+                id="temp-min"
+                type="number"
+                placeholder="e.g. 12"
+                value={tempMin}
+                onChange={e => setTempMin(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="temp-max">Max Temperature (°C)</label>
+              <input
+                id="temp-max"
+                type="number"
+                placeholder="e.g. 28"
+                value={tempMax}
+                onChange={e => setTempMax(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="input-row">
+            <div className="field">
+              <label htmlFor="precipitation">Precipitation (mm)</label>
+              <input
+                id="precipitation"
+                type="number"
+                placeholder="e.g. 45"
+                value={precipitation}
+                onChange={e => setPrecipitation(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="year">Year</label>
+              <input
+                id="year"
+                type="number"
+                placeholder="e.g. 2024"
+                value={year}
+                onChange={e => setYear(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <hr className="divider" />
 
           <button
             className={`btn-predict ${canPredict ? "active" : "disabled"}`}
@@ -449,7 +555,7 @@ function HomePage({ crop, setCrop, state, setState, canPredict, onPredict }) {
           </button>
 
           {!canPredict && (
-            <p className="helper-text">Select a crop and state to continue</p>
+            <p className="helper-text">Fill in all fields to continue</p>
           )}
         </div>
       </div>
@@ -488,14 +594,19 @@ function ResultsPage({ crop, state, prediction, onBack }) {
               </div>
               <div className="meta-chip">
                 <div className="meta-chip-label">Yield (bu/ac)</div>
-                <div className="meta-chip-value">{prediction ?? "—"}</div>
+                <div className={`meta-chip-value ${prediction == null ? "empty" : ""}`}>
+                  {prediction ?? "—"}
+                </div>
               </div>
             </div>
             <div className="placeholder-box">
-              {prediction
+              {prediction != null
                 ? <strong>Predicted yield: {prediction} bu/ac</strong>
                 : <strong>No prediction available yet</strong>
               }
+              {prediction == null && (
+                <p>The prediction model has not been connected.<br />Results will appear here once the model is integrated.</p>
+              )}
             </div>
           </div>
         </div>
